@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { useFetch } from '@core/hooks/useFetch';
 import type { HairBooking, CreateHairBookingData } from '../types';
 import { hairBookingService } from '../services';
 import { useAuth } from '@core/hooks/useAuth';
@@ -6,70 +7,58 @@ import { logger } from '@core/utils/logger';
 
 export function useMyHairBookings() {
   const { user } = useAuth();
-  const [bookings, setBookings] = useState<HairBooking[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchBookings = useCallback(async () => {
-    if (!user) {
-      setBookings([]);
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await hairBookingService.getBookingsByCustomer(user.id);
+  const { data: bookings, refetch, ...rest } = useFetch(
+    async () => {
+      const data = await hairBookingService.getBookingsByCustomer(user!.id);
       // Sort by date descending
-      data.sort((a, b) => {
+      return data.sort((a, b) => {
         const dateA = new Date(`${a.bookingDate}T${a.startTime}`);
         const dateB = new Date(`${b.bookingDate}T${b.startTime}`);
         return dateB.getTime() - dateA.getTime();
       });
-      setBookings(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '예약 목록을 불러오는데 실패했습니다.';
-      setError(message);
-      logger.error('Failed to fetch bookings', err);
-    } finally {
-      setIsLoading(false);
+    },
+    {
+      initialData: [] as HairBooking[],
+      enabled: !!user,
+      errorMessage: '예약 목록을 불러오는데 실패했습니다.',
     }
-  }, [user]);
-
-  useEffect(() => {
-    fetchBookings();
-  }, [fetchBookings]);
+  );
 
   const cancelBooking = useCallback(async (bookingId: string) => {
     try {
       await hairBookingService.cancelBooking(bookingId);
-      await fetchBookings();
+      await refetch();
       return true;
     } catch (err) {
       logger.error('Failed to cancel booking', err);
       return false;
     }
-  }, [fetchBookings]);
+  }, [refetch]);
 
-  const upcomingBookings = bookings.filter(b =>
-    b.status !== 'cancelled' && b.status !== 'completed' &&
-    new Date(`${b.bookingDate}T${b.startTime}`) >= new Date()
+  const upcomingBookings = useMemo(() =>
+    bookings.filter(b =>
+      b.status !== 'cancelled' && b.status !== 'completed' &&
+      new Date(`${b.bookingDate}T${b.startTime}`) >= new Date()
+    ),
+    [bookings]
   );
 
-  const pastBookings = bookings.filter(b =>
-    b.status === 'completed' || b.status === 'cancelled' ||
-    new Date(`${b.bookingDate}T${b.startTime}`) < new Date()
+  const pastBookings = useMemo(() =>
+    bookings.filter(b =>
+      b.status === 'completed' || b.status === 'cancelled' ||
+      new Date(`${b.bookingDate}T${b.startTime}`) < new Date()
+    ),
+    [bookings]
   );
 
   return {
     bookings,
     upcomingBookings,
     pastBookings,
-    isLoading,
-    error,
-    refetch: fetchBookings,
+    refetch,
     cancelBooking,
+    ...rest,
   };
 }
 

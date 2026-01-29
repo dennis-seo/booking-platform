@@ -2,6 +2,7 @@ import type { HairBooking } from '../types';
 import { formatDate, formatTime } from '@core/utils/dateUtils';
 import { formatDuration } from '@core/utils/timeSlotUtils';
 import { Button } from '@core/components/Button';
+import { BookingStatusBadge } from '@core/components/StatusBadge';
 
 interface BookingCardProps {
   booking: HairBooking;
@@ -9,24 +10,16 @@ interface BookingCardProps {
   showActions?: boolean;
 }
 
-const STATUS_LABELS: Record<string, { text: string; className: string }> = {
-  pending: { text: '대기중', className: 'status-pending' },
-  confirmed: { text: '확정', className: 'status-confirmed' },
-  completed: { text: '완료', className: 'status-completed' },
-  cancelled: { text: '취소됨', className: 'status-cancelled' },
-};
-
 export function BookingCard({ booking, onCancel, showActions = true }: BookingCardProps) {
-  const status = STATUS_LABELS[booking.status] || { text: booking.status, className: '' };
   const bookingDateTime = new Date(`${booking.bookingDate}T${booking.startTime}`);
   const isPast = bookingDateTime < new Date();
   const canCancel = !isPast && booking.status !== 'cancelled' && booking.status !== 'completed';
 
   return (
-    <div className={`booking-card ${status.className}`}>
+    <div className={`booking-card status-${booking.status}`}>
       <div className="booking-card-header">
         <h4>{booking.shop?.name || '샵 정보 없음'}</h4>
-        <span className={`booking-status ${status.className}`}>{status.text}</span>
+        <BookingStatusBadge status={booking.status} />
       </div>
 
       <div className="booking-card-body">

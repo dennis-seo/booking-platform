@@ -37,7 +37,7 @@ export const hairBookingService = {
     return populatedBookings;
   },
 
-  async getBookingsByShop(shopId: string, date?: string): Promise<HairBooking[]> {
+  async getBookingsByShop(shopId: string, date?: string, populate = false): Promise<HairBooking[]> {
     await delay(300);
     logger.debug('Fetching bookings by shop', { shopId, date });
 
@@ -45,6 +45,19 @@ export const hairBookingService = {
 
     if (date) {
       shopBookings = shopBookings.filter(b => b.bookingDate === date);
+    }
+
+    if (populate) {
+      const populatedBookings = await Promise.all(
+        shopBookings.map(async booking => {
+          const service = await hairShopService.getServiceById(booking.serviceId);
+          return {
+            ...booking,
+            service: service || undefined,
+          };
+        })
+      );
+      return populatedBookings;
     }
 
     return shopBookings;
@@ -81,7 +94,9 @@ export const hairBookingService = {
     const shop = await hairShopService.getShopById(shopId);
     if (!shop) return [];
 
-    const dayOfWeek = new Date(date).getDay();
+    // 로컬 시간대로 파싱하여 요일 계산 (UTC 문제 방지)
+    const [year, month, day] = date.split('-').map(Number);
+    const dayOfWeek = new Date(year, month - 1, day).getDay();
 
     // Get all existing bookings for this date
     const existingBookings = await this.getBookingsByShop(shopId, date);
@@ -91,8 +106,16 @@ export const hairBookingService = {
       ? existingBookings.filter(b => b.stylistId === stylistId && b.status !== 'cancelled')
       : existingBookings.filter(b => b.status !== 'cancelled');
 
-    // Get booked time slots
-    const bookedSlots = relevantBookings.map(b => b.startTime);
+    // Get booked time slots (전체 예약 시간대를 포함)
+    const bookedSlots: string[] = [];
+    relevantBookings.forEach(b => {
+      // 예약 시작부터 종료까지 모든 슬롯 추가
+      let currentTime = b.startTime;
+      while (currentTime < b.endTime) {
+        bookedSlots.push(currentTime);
+        currentTime = addMinutesToTime(currentTime, shop.slotIntervalMinutes);
+      }
+    });
 
     // Generate available time slots
     const slots = getAvailableTimeSlots(
