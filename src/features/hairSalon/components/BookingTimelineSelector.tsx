@@ -402,67 +402,86 @@ export function BookingTimelineSelector({
                       휴 무
                     </td>
                   ) : (
-                    timeSlots.map((time, timeIdx) => {
-                      const isOpTime = isOperatingTime(date, time);
-                      const isPast = isPastTime(date, time);
-                      const isAvailable = isSlotAvailable(date, time);
-                      const isSelectedSlot = isSelected(date, time);
-                      const isHourStart = time.endsWith(':00');
-                      const booking = getBookingForTime(date, time);
-                      const isBooked = !!booking;
-                      const hasSlotData = slotsMap[dateStr] !== undefined;
+                    (() => {
+                      const cells: React.ReactNode[] = [];
+                      let skipUntilIdx = -1;
 
-                      // 예약 블록의 시작인지 연속인지 확인
-                      const isBookingStart = isBooked && booking && booking.startTime === time;
-                      const isBookingContinuation = isBooked && booking && booking.startTime !== time;
+                      timeSlots.forEach((time, timeIdx) => {
+                        // 이전 예약 블록에 포함된 슬롯은 건너뛰기
+                        if (timeIdx <= skipUntilIdx) return;
 
-                      let cellClass = 'time-cell';
-                      // hour-start는 항상 :00 시간에 추가
-                      if (isHourStart) {
-                        cellClass += ' hour-start';
-                      }
-                      if (!isOpTime) {
-                        cellClass += ' non-operating';
-                      } else if (isSelectedSlot) {
-                        cellClass += ' selected';
-                      } else if (isPast) {
-                        cellClass += ' past';
-                      } else if (isLoadingRow || !hasSlotData) {
-                        cellClass += ' loading';
-                      } else if (isAvailable) {
-                        cellClass += ' available';
-                      } else {
-                        cellClass += ' booked';
-                        if (isBookingStart) {
-                          cellClass += ' booking-start';
-                        } else if (isBookingContinuation) {
-                          cellClass += ' booking-continuation';
+                        const isOpTime = isOperatingTime(date, time);
+                        const isPast = isPastTime(date, time);
+                        const isAvailable = isSlotAvailable(date, time);
+                        const isSelectedSlot = isSelected(date, time);
+                        const isHourStart = time.endsWith(':00');
+                        const booking = getBookingForTime(date, time);
+                        const isBooked = !!booking;
+                        const hasSlotData = slotsMap[dateStr] !== undefined;
+
+                        // 예약 블록의 시작인지 확인하고 colSpan 계산
+                        const isBookingStart = isBooked && booking && booking.startTime === time;
+                        let colSpan = 1;
+
+                        if (isBookingStart && booking) {
+                          // 예약 슬롯 개수 계산 (startTime ~ endTime)
+                          const startIdx = timeSlots.indexOf(booking.startTime);
+                          const endIdx = timeSlots.indexOf(booking.endTime);
+                          if (startIdx !== -1 && endIdx !== -1) {
+                            colSpan = endIdx - startIdx;
+                            skipUntilIdx = endIdx - 1;
+                          } else if (startIdx !== -1) {
+                            // endTime이 timeSlots에 없으면 마지막까지
+                            colSpan = timeSlots.length - startIdx;
+                            skipUntilIdx = timeSlots.length - 1;
+                          }
                         }
-                      }
 
-                      const isClickable = isOpTime && !isPast && isAvailable && !isLoadingRow;
+                        let cellClass = 'time-cell';
+                        if (isHourStart) {
+                          cellClass += ' hour-start';
+                        }
+                        if (!isOpTime) {
+                          cellClass += ' non-operating';
+                        } else if (isSelectedSlot) {
+                          cellClass += ' selected';
+                        } else if (isPast) {
+                          cellClass += ' past';
+                        } else if (isLoadingRow || !hasSlotData) {
+                          cellClass += ' loading';
+                        } else if (isAvailable) {
+                          cellClass += ' available';
+                        } else {
+                          cellClass += ' booked';
+                        }
 
-                      // 툴팁 설정
-                      let tooltip: string | undefined;
-                      if (isClickable) {
-                        tooltip = `${formatDate(date)} ${time} 선택`;
-                      } else if (isBooked && booking) {
-                        tooltip = getBookingTooltip(booking);
-                      }
+                        const isClickable = isOpTime && !isPast && isAvailable && !isLoadingRow;
 
-                      return (
-                        <td
-                          key={time}
-                          className={cellClass}
-                          onClick={() => isClickable && handleSlotClick(date, time)}
-                          data-tooltip={tooltip}
-                        >
-                          {isLoadingRow && isOpTime && !isPast && (
-                            <span className="loading-dot">·</span>
-                          )}
-                        </td>
-                      );
-                    })
+                        // 툴팁 설정
+                        let tooltip: string | undefined;
+                        if (isClickable) {
+                          tooltip = `${formatDate(date)} ${time} 선택`;
+                        } else if (isBooked && booking) {
+                          tooltip = getBookingTooltip(booking);
+                        }
+
+                        cells.push(
+                          <td
+                            key={time}
+                            className={cellClass}
+                            colSpan={colSpan > 1 ? colSpan : undefined}
+                            onClick={() => isClickable && handleSlotClick(date, time)}
+                            data-tooltip={tooltip}
+                          >
+                            {isLoadingRow && isOpTime && !isPast && (
+                              <span className="loading-dot">·</span>
+                            )}
+                          </td>
+                        );
+                      });
+
+                      return cells;
+                    })()
                   )}
                 </tr>
               );

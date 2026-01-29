@@ -129,11 +129,7 @@ export const hairBookingService = {
     const operatingHours = shop.operatingHours.find(oh => oh.dayOfWeek === dayOfWeek);
     if (!operatingHours || operatingHours.isClosed) return [];
 
-    return slots.map(slot => ({
-      time: slot.time,
-      isAvailable: slot.isAvailable &&
-        addMinutesToTime(slot.time, serviceDurationMinutes) <= operatingHours.closeTime,
-    }));
+    return slots;
   },
 
   async createBooking(

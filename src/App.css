@@ -2855,16 +2855,7 @@ input, textarea, select {
 .booking-timeline .time-cell.booked {
   background: #fecaca;
   cursor: not-allowed;
-}
-
-/* 예약 블록 시작 - 왼쪽에 테두리 표시 */
-.booking-timeline .time-cell.booked.booking-start {
   border-left: 2px solid #f87171;
-}
-
-/* 예약 블록 연속 - 내부 구분선을 배경색으로 덮음 */
-.booking-timeline .time-cell.booked.booking-continuation {
-  box-shadow: -1px 0 0 0 #fecaca;
 }
 
 .booking-timeline .time-cell.available {
