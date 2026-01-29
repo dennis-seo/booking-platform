@@ -1247,6 +1247,13 @@ input, textarea, select {
   margin-top: 4px;
 }
 
+.stylist-days-off {
+  font-size: 0.7rem;
+  color: var(--warning, #e67e22);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
 /* ===================================
    Booking Page
    =================================== */

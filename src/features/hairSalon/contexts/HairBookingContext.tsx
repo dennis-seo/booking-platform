@@ -32,7 +32,7 @@ interface HairBookingContextValue extends BookingState {
   createdBooking: HairBooking | null;
 }
 
-const STEPS: BookingStep[] = ['service', 'datetime', 'stylist', 'confirm', 'complete'];
+const STEPS: BookingStep[] = ['service', 'stylist', 'datetime', 'confirm', 'complete'];
 
 const initialState: BookingState = {
   shopId: null,
@@ -80,7 +80,13 @@ export function HairBookingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const selectStylist = useCallback((stylist: Stylist | null) => {
-    setState(prev => ({ ...prev, selectedStylist: stylist }));
+    setState(prev => ({
+      ...prev,
+      selectedStylist: stylist,
+      // Reset datetime when stylist changes (different availability)
+      selectedDate: null,
+      selectedTime: null,
+    }));
   }, []);
 
   const setNotes = useCallback((notes: string) => {

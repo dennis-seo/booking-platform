@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Button } from '@core/components/Button';
 import type { OperatingHours } from '@core/types';
-import type { HairBookingSlot, HairBooking } from '../types';
+import type { HairBookingSlot, HairBooking, Stylist } from '../types';
 import { hairBookingService } from '../services';
+import { addMinutesToTime } from '@core/utils/timeSlotUtils';
 
 // 로컬 시간대 기준 날짜 문자열 생성 (YYYY-MM-DD)
 const toLocalDateString = (date: Date): string => {
@@ -16,7 +17,7 @@ interface BookingTimelineSelectorProps {
   shopId: string;
   operatingHours: OperatingHours[];
   serviceDurationMinutes: number;
-  stylistId?: string | null;
+  stylist?: Stylist | null; // 스타일리스트 정보 (휴무일 포함)
   selectedDate: Date | null;
   selectedTime: string | null;
   onSelect: (date: Date, time: string) => void;
@@ -30,13 +31,14 @@ export function BookingTimelineSelector({
   shopId,
   operatingHours,
   serviceDurationMinutes,
-  stylistId,
+  stylist,
   selectedDate,
   selectedTime,
   onSelect,
   daysToShow = 14,
   showCustomerInfo = false,
 }: BookingTimelineSelectorProps) {
+  const stylistId = stylist?.id;
   const [currentStartDate, setCurrentStartDate] = useState(() => new Date());
   const [slotsMap, setSlotsMap] = useState<Record<string, HairBookingSlot[]>>({});
   const [bookingsMap, setBookingsMap] = useState<Record<string, HairBooking[]>>({});
@@ -132,7 +134,7 @@ export function BookingTimelineSelector({
         setLoadingDates(prev => new Set(prev).add(dateStr));
 
         try {
-          const [slots, bookings] = await Promise.all([
+          const [slots, allBookings] = await Promise.all([
             hairBookingService.getAvailableSlots(
               shopId,
               dateStr,
@@ -142,9 +144,14 @@ export function BookingTimelineSelector({
             hairBookingService.getBookingsByShop(shopId, dateStr, true),
           ]);
 
+          // 스타일리스트가 선택된 경우 해당 스타일리스트의 예약만 표시
+          const filteredBookings = stylistId
+            ? allBookings.filter(b => b.stylistId === stylistId)
+            : allBookings;
+
           if (!cancelled) {
             setSlotsMap(prev => ({ ...prev, [dateStr]: slots }));
-            setBookingsMap(prev => ({ ...prev, [dateStr]: bookings }));
+            setBookingsMap(prev => ({ ...prev, [dateStr]: filteredBookings }));
           }
         } catch (err) {
           console.error('Failed to fetch slots for', dateStr, err);
@@ -172,6 +179,26 @@ export function BookingTimelineSelector({
     const dayOfWeek = date.getDay();
     const hours = operatingHours.find(h => h.dayOfWeek === dayOfWeek);
     return hours ? !hours.isClosed : false;
+  };
+
+  // 스타일리스트 휴무일인지 확인
+  const isStylistDayOff = (date: Date): boolean => {
+    if (!stylist) return false;
+
+    const dayOfWeek = date.getDay();
+    const dateStr = toLocalDateString(date);
+
+    // 정기 휴무일 체크
+    if (stylist.regularDaysOff?.includes(dayOfWeek)) {
+      return true;
+    }
+
+    // 특정 날짜 휴무 체크
+    if (stylist.daysOff?.includes(dateStr)) {
+      return true;
+    }
+
+    return false;
   };
 
   // 특정 시간이 영업시간인지 확인
@@ -202,8 +229,8 @@ export function BookingTimelineSelector({
     return slotDate < now;
   };
 
-  // 선택된 슬롯인지 확인
-  const isSelected = (date: Date, time: string) => {
+  // 선택 범위의 시작인지 확인
+  const isSelectionStart = (date: Date, time: string) => {
     if (!selectedDate || !selectedTime) return false;
     const dateStr = toLocalDateString(date);
     const selectedDateStr = toLocalDateString(selectedDate);
@@ -307,10 +334,32 @@ export function BookingTimelineSelector({
     return start <= today;
   }, [currentStartDate]);
 
+  // 선택 범위가 기존 예약과 겹치는지 확인
+  const checkConflict = (date: Date, startTime: string): boolean => {
+    const dateStr = toLocalDateString(date);
+    const bookings = bookingsMap[dateStr];
+    if (!bookings) return false;
+
+    const endTime = addMinutesToTime(startTime, serviceDurationMinutes);
+
+    // 선택 범위와 기존 예약이 겹치는지 확인
+    return bookings.some(b => {
+      if (b.status === 'cancelled') return false;
+      // 두 시간 범위가 겹치는 조건: startA < endB && endA > startB
+      return startTime < b.endTime && endTime > b.startTime;
+    });
+  };
+
   const handleSlotClick = (date: Date, time: string) => {
     if (!isOperatingDay(date) || !isOperatingTime(date, time)) return;
     if (isPastTime(date, time)) return;
     if (!isSlotAvailable(date, time)) return;
+
+    // 선택 범위가 기존 예약과 겹치는지 확인
+    if (checkConflict(date, time)) {
+      alert('선택한 시간대가 기존 예약과 겹칩니다. 다른 시간을 선택해주세요.');
+      return;
+    }
 
     onSelect(date, time);
   };
@@ -380,14 +429,16 @@ export function BookingTimelineSelector({
           <tbody>
             {dates.map((date, idx) => {
               const isOp = isOperatingDay(date);
+              const isStylistOff = isStylistDayOff(date);
               const isTodayRow = isToday(date);
               const dateStr = toLocalDateString(date);
               const isLoadingRow = loadingDates.has(dateStr);
+              const isClosedDay = !isOp || isStylistOff;
 
               return (
                 <tr
                   key={idx}
-                  className={`timeline-row ${!isOp ? 'closed-day' : ''} ${isTodayRow ? 'today-row' : ''}`}
+                  className={`timeline-row ${isClosedDay ? 'closed-day' : ''} ${isTodayRow ? 'today-row' : ''}`}
                 >
                   <td className="date-cell">
                     <div className="date-info">
@@ -397,9 +448,9 @@ export function BookingTimelineSelector({
                       </span>
                     </div>
                   </td>
-                  {!isOp ? (
+                  {isClosedDay ? (
                     <td colSpan={timeSlots.length} className="closed-day-cell">
-                      휴 무
+                      {!isOp ? '휴 무' : `${stylist?.name} 휴무`}
                     </td>
                   ) : (
                     (() => {
@@ -413,7 +464,6 @@ export function BookingTimelineSelector({
                         const isOpTime = isOperatingTime(date, time);
                         const isPast = isPastTime(date, time);
                         const isAvailable = isSlotAvailable(date, time);
-                        const isSelectedSlot = isSelected(date, time);
                         const isHourStart = time.endsWith(':00');
                         const booking = getBookingForTime(date, time);
                         const isBooked = !!booking;
@@ -421,6 +471,10 @@ export function BookingTimelineSelector({
 
                         // 예약 블록의 시작인지 확인하고 colSpan 계산
                         const isBookingStart = isBooked && booking && booking.startTime === time;
+                        // 선택 범위의 시작인지 확인
+                        const isSelStart = isSelectionStart(date, time);
+                        // 과거 시간 블록의 시작인지 확인 (영업 시간 내에서만)
+                        const isPastStart = isOpTime && isPast && (timeIdx === 0 || !isPastTime(date, timeSlots[timeIdx - 1]));
                         let colSpan = 1;
 
                         if (isBookingStart && booking) {
@@ -435,6 +489,33 @@ export function BookingTimelineSelector({
                             colSpan = timeSlots.length - startIdx;
                             skipUntilIdx = timeSlots.length - 1;
                           }
+                        } else if (isSelStart) {
+                          // 선택 범위 colSpan 계산 (서비스 duration 기준)
+                          const selEndTime = addMinutesToTime(time, serviceDurationMinutes);
+                          const startIdx = timeIdx;
+                          const endIdx = timeSlots.indexOf(selEndTime);
+                          if (endIdx !== -1) {
+                            colSpan = endIdx - startIdx;
+                            skipUntilIdx = endIdx - 1;
+                          } else {
+                            // endTime이 timeSlots에 없으면 마지막까지
+                            colSpan = timeSlots.length - startIdx;
+                            skipUntilIdx = timeSlots.length - 1;
+                          }
+                        } else if (isPastStart) {
+                          // 연속된 과거 슬롯 개수 계산
+                          let pastEndIdx = timeIdx;
+                          for (let i = timeIdx; i < timeSlots.length; i++) {
+                            if (isOperatingTime(date, timeSlots[i]) && isPastTime(date, timeSlots[i])) {
+                              pastEndIdx = i;
+                            } else {
+                              break;
+                            }
+                          }
+                          colSpan = pastEndIdx - timeIdx + 1;
+                          if (colSpan > 1) {
+                            skipUntilIdx = pastEndIdx;
+                          }
                         }
 
                         let cellClass = 'time-cell';
@@ -443,7 +524,7 @@ export function BookingTimelineSelector({
                         }
                         if (!isOpTime) {
                           cellClass += ' non-operating';
-                        } else if (isSelectedSlot) {
+                        } else if (isSelStart) {
                           cellClass += ' selected';
                         } else if (isPast) {
                           cellClass += ' past';

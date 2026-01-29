@@ -1,5 +1,7 @@
 import type { OperatingHours } from '@core/types';
 
+export type ShopApprovalStatus = 'pending' | 'approved' | 'rejected';
+
 export interface HairShop {
   id: string;
   name: string;
@@ -11,6 +13,8 @@ export interface HairShop {
   operatingHours: OperatingHours[];
   imageUrl: string | null;
   isActive: boolean;
+  approvalStatus: ShopApprovalStatus;
+  rejectionReason?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -22,6 +26,8 @@ export interface Stylist {
   title: string; // "원장", "실장", "디자이너"
   profileImage: string | null;
   introduction?: string;
+  regularDaysOff?: number[]; // 정기 휴무 요일 (0=일, 1=월, ..., 6=토)
+  daysOff?: string[]; // 특정 날짜 휴무 (YYYY-MM-DD 형식)
   isActive: boolean;
   createdAt: string;
 }

@@ -1,10 +1,8 @@
 import { useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useHairShop, useHairServices, useStylists, useHairSlots } from '../hooks';
+import { useHairShop, useHairServices, useStylists } from '../hooks';
 import { HairBookingProvider, useHairBookingContext } from '../contexts';
-import { ServiceSelector, StylistSelector, BookingConfirm } from '../components';
-import { Calendar } from '@core/components/Calendar';
-import { TimeSlotPicker } from '@core/components/TimeSlotPicker';
+import { ServiceSelector, StylistSelector, BookingConfirm, BookingTimelineSelector } from '../components';
 import { LoadingSpinner } from '@core/components/LoadingSpinner';
 import { Button } from '@core/components/Button';
 import { useAuth } from '@core/hooks/useAuth';
@@ -39,13 +37,6 @@ function BookingFlow() {
     error,
   } = useHairBookingContext();
 
-  const { slots, isLoading: slotsLoading } = useHairSlots({
-    shopId,
-    date: selectedDate,
-    serviceDurationMinutes: selectedService?.durationMinutes || 30,
-    stylistId: selectedStylist?.id,
-  });
-
   // Redirect if not authenticated
   useEffect(() => {
     if (!isAuthenticated) {
@@ -75,11 +66,6 @@ function BookingFlow() {
     );
   }
 
-  // Get closed days for calendar
-  const closedDays = shop.operatingHours
-    .filter(oh => oh.isClosed)
-    .map(oh => oh.dayOfWeek);
-
   const renderStep = () => {
     switch (currentStep) {
       case 'service':
@@ -108,61 +94,15 @@ function BookingFlow() {
           </div>
         );
 
-      case 'datetime':
+      case 'stylist':
         return (
           <div className="booking-step">
-            <h2>날짜 및 시간 선택</h2>
+            <h2>스타일리스트 선택</h2>
             {selectedService && (
               <p className="selected-service-info">
                 선택된 서비스: {selectedService.name} ({selectedService.durationMinutes}분)
               </p>
             )}
-
-            <div className="datetime-selection">
-              <div className="date-section">
-                <h3>날짜</h3>
-                <Calendar
-                  selectedDate={selectedDate}
-                  onSelectDate={selectDate}
-                  disabledDays={closedDays}
-                />
-              </div>
-
-              <div className="time-section">
-                <h3>시간</h3>
-                {!selectedDate ? (
-                  <p className="hint">날짜를 먼저 선택해주세요</p>
-                ) : slotsLoading ? (
-                  <LoadingSpinner size="sm" />
-                ) : (
-                  <TimeSlotPicker
-                    slots={slots}
-                    selectedTime={selectedTime}
-                    onSelectTime={selectTime}
-                  />
-                )}
-              </div>
-            </div>
-
-            <div className="step-actions">
-              <Button variant="outline" onClick={prevStep}>
-                이전
-              </Button>
-              <Button
-                variant="primary"
-                onClick={nextStep}
-                disabled={!selectedDate || !selectedTime}
-              >
-                다음
-              </Button>
-            </div>
-          </div>
-        );
-
-      case 'stylist':
-        return (
-          <div className="booking-step">
-            <h2>스타일리스트 선택</h2>
             <StylistSelector
               stylists={stylists}
               selectedStylist={selectedStylist}
@@ -174,6 +114,48 @@ function BookingFlow() {
                 이전
               </Button>
               <Button variant="primary" onClick={nextStep}>
+                다음
+              </Button>
+            </div>
+          </div>
+        );
+
+      case 'datetime':
+        const handleDateTimeSelect = (date: Date, time: string) => {
+          selectDate(date);
+          selectTime(time);
+        };
+
+        return (
+          <div className="booking-step datetime-step">
+            <h2>날짜 및 시간 선택</h2>
+            {selectedService && (
+              <p className="selected-service-info">
+                선택된 서비스: {selectedService.name} ({selectedService.durationMinutes}분)
+                {selectedStylist && ` | 스타일리스트: ${selectedStylist.name}`}
+              </p>
+            )}
+
+            <BookingTimelineSelector
+              shopId={shopId!}
+              operatingHours={shop.operatingHours}
+              serviceDurationMinutes={selectedService?.durationMinutes || 30}
+              stylist={selectedStylist}
+              selectedDate={selectedDate}
+              selectedTime={selectedTime}
+              onSelect={handleDateTimeSelect}
+              daysToShow={14}
+            />
+
+            <div className="step-actions">
+              <Button variant="outline" onClick={prevStep}>
+                이전
+              </Button>
+              <Button
+                variant="primary"
+                onClick={nextStep}
+                disabled={!selectedDate || !selectedTime}
+              >
                 다음
               </Button>
             </div>
@@ -229,7 +211,7 @@ function BookingFlow() {
     }
   };
 
-  const steps = ['service', 'datetime', 'stylist', 'confirm'];
+  const steps = ['service', 'stylist', 'datetime', 'confirm'];
   const currentStepIndex = steps.indexOf(currentStep);
 
   return (
@@ -249,8 +231,8 @@ function BookingFlow() {
               <span className="step-number">{index + 1}</span>
               <span className="step-label">
                 {step === 'service' && '서비스'}
-                {step === 'datetime' && '날짜/시간'}
                 {step === 'stylist' && '스타일리스트'}
+                {step === 'datetime' && '날짜/시간'}
                 {step === 'confirm' && '확인'}
               </span>
             </div>
