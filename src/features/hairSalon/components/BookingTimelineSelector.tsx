@@ -41,6 +41,15 @@ export function BookingTimelineSelector({
   const [slotsMap, setSlotsMap] = useState<Record<string, HairBookingSlot[]>>({});
   const [bookingsMap, setBookingsMap] = useState<Record<string, HairBooking[]>>({});
   const [loadingDates, setLoadingDates] = useState<Set<string>>(new Set());
+  const [now, setNow] = useState(() => new Date());
+
+  // 현재 시간 1분마다 업데이트
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // 표시할 날짜 배열 생성
   const dates = useMemo(() => {
@@ -271,6 +280,24 @@ export function BookingTimelineSelector({
     return date.toDateString() === today.toDateString();
   };
 
+  // 현재 시간이 타임라인 범위 내에 있는지, 그리고 위치(슬롯 인덱스) 계산
+  const getCurrentTimePosition = () => {
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+
+    // 영업시간 범위 밖이면 null
+    if (currentHour < timeRange.start || currentHour >= timeRange.end) {
+      return null;
+    }
+
+    // 시작 시간부터의 총 분
+    const minutesFromStart = (currentHour - timeRange.start) * 60 + currentMinute;
+    // 각 슬롯이 10분이므로
+    const slotIndex = minutesFromStart / 10;
+
+    return slotIndex;
+  };
+
   // 첫 날이 오늘인지 확인 (이전 버튼 비활성화용)
   const isAtStart = useMemo(() => {
     const today = new Date();
@@ -330,6 +357,15 @@ export function BookingTimelineSelector({
 
       {/* 타임라인 그리드 */}
       <div className="timeline-container booking-timeline">
+        {/* 현재 시간 세로 가이드라인 */}
+        {getCurrentTimePosition() !== null && (
+          <div
+            className="current-time-line-full"
+            style={{
+              left: `calc(80px + ${getCurrentTimePosition()! * 12}px)`,
+            }}
+          />
+        )}
         <table className="timeline-table">
           <thead>
             <tr>
@@ -376,18 +412,14 @@ export function BookingTimelineSelector({
                       const isBooked = !!booking;
                       const hasSlotData = slotsMap[dateStr] !== undefined;
 
-                      // 이전 셀과 같은 예약인지 확인 (연속된 예약 블록)
-                      const prevTime = timeIdx > 0 ? timeSlots[timeIdx - 1] : null;
-                      const prevBooking = prevTime ? getBookingForTime(date, prevTime) : null;
-                      const isContinuousBooking = isBooked && prevBooking && booking?.id === prevBooking?.id;
+                      // 예약 블록의 시작인지 연속인지 확인
+                      const isBookingStart = isBooked && booking && booking.startTime === time;
+                      const isBookingContinuation = isBooked && booking && booking.startTime !== time;
 
                       let cellClass = 'time-cell';
                       // hour-start는 항상 :00 시간에 추가
                       if (isHourStart) {
                         cellClass += ' hour-start';
-                      }
-                      if (isContinuousBooking) {
-                        cellClass += ' continuous-booking';
                       }
                       if (!isOpTime) {
                         cellClass += ' non-operating';
@@ -401,6 +433,11 @@ export function BookingTimelineSelector({
                         cellClass += ' available';
                       } else {
                         cellClass += ' booked';
+                        if (isBookingStart) {
+                          cellClass += ' booking-start';
+                        } else if (isBookingContinuation) {
+                          cellClass += ' booking-continuation';
+                        }
                       }
 
                       const isClickable = isOpTime && !isPast && isAvailable && !isLoadingRow;
@@ -418,7 +455,7 @@ export function BookingTimelineSelector({
                           key={time}
                           className={cellClass}
                           onClick={() => isClickable && handleSlotClick(date, time)}
-                          title={tooltip}
+                          data-tooltip={tooltip}
                         >
                           {isLoadingRow && isOpTime && !isPast && (
                             <span className="loading-dot">·</span>
