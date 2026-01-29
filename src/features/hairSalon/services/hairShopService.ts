@@ -16,14 +16,20 @@ export const hairShopService = {
   // Shop operations
   async getShops(): Promise<HairShop[]> {
     await delay(300);
-    logger.debug('Fetching all shops');
-    return shops.filter(s => s.isActive);
+    logger.debug('Fetching all active approved shops');
+    return shops.filter(s => s.isActive && s.approvalStatus === 'approved');
+  },
+
+  async getAllShops(): Promise<HairShop[]> {
+    await delay(300);
+    logger.debug('Fetching all shops (admin)');
+    return [...shops];
   },
 
   async getShopById(id: string): Promise<HairShop | null> {
     await delay(200);
     logger.debug('Fetching shop by id', { id });
-    return shops.find(s => s.id === id && s.isActive) || null;
+    return shops.find(s => s.id === id && s.isActive && s.approvalStatus === 'approved') || null;
   },
 
   async getShopsByOwner(ownerId: string): Promise<HairShop[]> {
@@ -44,11 +50,12 @@ export const hairShopService = {
       slotIntervalMinutes: data.slotIntervalMinutes || 30,
       operatingHours: data.operatingHours,
       imageUrl: data.imageUrl || null,
-      isActive: true,
+      isActive: false,
+      approvalStatus: 'pending',
       createdAt: new Date().toISOString(),
     };
     shops.push(newShop);
-    logger.info('Shop created', { shopId: newShop.id });
+    logger.info('Shop created (pending approval)', { shopId: newShop.id });
     return newShop;
   },
 

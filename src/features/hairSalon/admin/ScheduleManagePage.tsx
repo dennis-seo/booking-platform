@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, Navigate, Link } from 'react-router-dom';
 import { useAuth } from '@core/hooks/useAuth';
 import { useHairShop, useStylists } from '../hooks';
-import { ScheduleGrid } from '../components/ScheduleGrid';
+import { ScheduleGrid, DateTimelineView } from '../components';
 import { Button } from '@core/components/Button';
 import { Modal } from '@core/components/Modal';
 import { LoadingSpinner } from '@core/components/LoadingSpinner';
@@ -10,6 +10,8 @@ import { hairBookingService } from '../services';
 import type { HairBooking } from '../types';
 import { MONTH_NAMES, formatDate, formatTime } from '@core/utils/dateUtils';
 import { formatDuration } from '@core/utils/timeSlotUtils';
+
+type ViewMode = 'grid' | 'timeline';
 
 export function ScheduleManagePage() {
   const { shopId } = useParams<{ shopId: string }>();
@@ -26,6 +28,7 @@ export function ScheduleManagePage() {
   const [selectedBooking, setSelectedBooking] = useState<HairBooking | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('timeline');
 
   // Fetch bookings for the current month
   const fetchBookings = useCallback(async () => {
@@ -148,11 +151,11 @@ export function ScheduleManagePage() {
     return <LoadingSpinner text="로딩 중..." />;
   }
 
-  if (!isAuthenticated || user?.role !== 'business_owner') {
+  if (!isAuthenticated || (user?.role !== 'business_owner' && user?.role !== 'admin')) {
     return <Navigate to="/" replace />;
   }
 
-  if (!shop || shop.ownerId !== user.id) {
+  if (!shop || (shop.ownerId !== user.id && user?.role !== 'admin')) {
     return <Navigate to="/" replace />;
   }
 
@@ -171,22 +174,41 @@ export function ScheduleManagePage() {
         </div>
       </div>
 
-      {/* Month Navigation */}
+      {/* Controls */}
       <div className="schedule-controls">
-        <div className="month-nav">
-          <Button variant="outline" size="sm" onClick={goToPrevMonth}>
-            ◀ 이전달
+        <div className="view-toggle">
+          <Button
+            variant={viewMode === 'timeline' ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('timeline')}
+          >
+            타임라인
           </Button>
-          <span className="current-month">
-            {currentYear}년 {MONTH_NAMES[currentMonth]}
-          </span>
-          <Button variant="outline" size="sm" onClick={goToNextMonth}>
-            다음달 ▶
-          </Button>
-          <Button variant="ghost" size="sm" onClick={goToToday}>
-            오늘
+          <Button
+            variant={viewMode === 'grid' ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('grid')}
+          >
+            스타일리스트별
           </Button>
         </div>
+
+        {viewMode === 'grid' && (
+          <div className="month-nav">
+            <Button variant="outline" size="sm" onClick={goToPrevMonth}>
+              ◀ 이전달
+            </Button>
+            <span className="current-month">
+              {currentYear}년 {MONTH_NAMES[currentMonth]}
+            </span>
+            <Button variant="outline" size="sm" onClick={goToNextMonth}>
+              다음달 ▶
+            </Button>
+            <Button variant="ghost" size="sm" onClick={goToToday}>
+              오늘
+            </Button>
+          </div>
+        )}
 
         <div className="schedule-stats">
           <span className="stat confirmed">확정 {confirmedCount}</span>
@@ -196,18 +218,26 @@ export function ScheduleManagePage() {
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="schedule-legend">
-        <span className="legend-item available">예약 가능</span>
-        <span className="legend-item confirmed">확정</span>
-        <span className="legend-item pending">대기중</span>
-        <span className="legend-item completed">완료</span>
-        <span className="legend-item non-working">영업외</span>
-      </div>
+      {/* Legend - only for grid view */}
+      {viewMode === 'grid' && (
+        <div className="schedule-legend">
+          <span className="legend-item available">예약 가능</span>
+          <span className="legend-item confirmed">확정</span>
+          <span className="legend-item pending">대기중</span>
+          <span className="legend-item completed">완료</span>
+          <span className="legend-item non-working">영업외</span>
+        </div>
+      )}
 
-      {/* Schedule Grid */}
+      {/* Schedule Views */}
       {isLoadingBookings ? (
         <LoadingSpinner text="예약 정보를 불러오는 중..." />
+      ) : viewMode === 'timeline' ? (
+        <DateTimelineView
+          bookings={bookings}
+          operatingHours={shop.operatingHours}
+          daysToShow={14}
+        />
       ) : stylists.length === 0 ? (
         <div className="empty-state">
           <p>스타일리스트를 먼저 등록해주세요.</p>

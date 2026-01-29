@@ -33,10 +33,10 @@ export function Header() {
           {isAuthenticated ? (
             <>
               <span className="user-info">
-                {user?.name} ({user?.role === 'business_owner' ? '사업자' : '고객'})
+                {user?.name} ({user?.role === 'admin' ? '관리자' : user?.role === 'business_owner' ? '사업자' : '고객'})
               </span>
-              {user?.role === 'business_owner' && (
-                <Link to="/hair/admin/register" className="nav-link">
+              {(user?.role === 'admin' || user?.role === 'business_owner') && (
+                <Link to="/hair/admin" className="nav-link">
                   업체 관리
                 </Link>
               )}
